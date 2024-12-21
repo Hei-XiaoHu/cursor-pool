@@ -6,7 +6,7 @@ from threading import Lock
 
 class PoolManager:
     def __init__(self):
-        self.file_path = "../data/pool.json"
+        self.file_path = "./data/pool.json"
         self.lock = Lock()
         self.current_index = 0
         self.load_pool()
