@@ -1,37 +1,10 @@
-# 文件开头添加
-from gevent import monkey
-monkey.patch_all()  # 移到最前面，在其他导入之前
-
-# ... 其他导入 ...
 from flask import Flask, request, jsonify, Response, stream_with_context
 from openai import OpenAI
 from config import BASE_URL, SECRET
 from pool_manager import PoolManager
-import threading
-import httpx
-from concurrent.futures import ThreadPoolExecutor
-from gevent.pywsgi import WSGIServer
 
-# 应用初始化
 app = Flask(__name__)
 pool_manager = PoolManager()
-executor = ThreadPoolExecutor(max_workers=50)
-client_pool = {}
-client_pool_lock = threading.Lock()
-
-def get_client(token, checksum):
-    """获取或创建 OpenAI 客户端"""
-    key = f"{token}:{checksum}"
-    with client_pool_lock:
-        if key not in client_pool:
-            api_base = BASE_URL if BASE_URL.endswith('/v1') else f"{BASE_URL.rstrip('/')}/v1"
-            client_pool[key] = OpenAI(
-                base_url=api_base,
-                api_key=token,
-                default_headers={'x-cursor-checksum': checksum},
-                timeout=httpx.Timeout(120.0, connect=10.0)  # 增加超时时间
-            )
-        return client_pool[key]
 
 
 def verify_secret():
@@ -47,61 +20,6 @@ def check_auth():
     if request.path != '/health':
         if not verify_secret():
             return jsonify({'error': 'Unauthorized'}), 401
-
-
-@app.route('/v1/chat/completions', methods=['POST'])
-def chat_completions():
-    try:
-        token_info = pool_manager.get_next_token_info()
-        if not token_info:
-            return jsonify({'error': 'No available tokens'}), 503  # 改用503状态码
-
-        token, checksum = token_info
-        request_json = request.get_json()
-
-        if not request_json:
-            return jsonify({'error': 'Invalid JSON'}), 400
-
-        is_stream = request_json.get('stream', False)
-        client = get_client(token, checksum)
-
-        if is_stream:
-            def generate():
-                request_data = request_json.copy()
-                request_data.pop('stream', None)
-                try:
-                    stream = client.chat.completions.create(
-                        **request_data,
-                        stream=True,
-                        timeout=120  # 添加超时设置
-                    )
-                    for chunk in stream:
-                        yield f"data: {chunk.model_dump_json()}\n\n"
-                except Exception as e:
-                    yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
-                finally:
-                    yield "data: [DONE]\n\n"
-
-            return Response(
-                stream_with_context(generate()),
-                content_type='text/event-stream',
-                headers={
-                    'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive',
-                    'X-Accel-Buffering': 'no',
-                    'Transfer-Encoding': 'chunked'
-                }
-            )
-        else:
-            future = executor.submit(
-                lambda: client.chat.completions.create(**request_json)
-            )
-            response = future.result(timeout=60)  # 增加超时时间到60秒
-            return jsonify(response.model_dump()), 200
-
-    except Exception as e:
-        app.logger.error(f"Error in chat_completions: {str(e)}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/pool/add', methods=['POST'])
@@ -136,21 +54,64 @@ def empty_pool():
     pool_manager.empty_pool()
     return jsonify({'message': 'Pool emptied successfully'})
 
-# 添加健康检查端点
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'healthy'}), 200
 
+@app.route('/v1/chat/completions', methods=['POST'])
+def chat_completions():
+    try:
+        token_info = pool_manager.get_next_token_info()
+        if not token_info:
+            return jsonify({'error': 'No tokens in pool'}), 400
 
+        token, checksum = token_info
+
+        # 获取请求数据
+        request_json = request.get_json()
+        is_stream = request_json.get('stream', False)
+
+        # 确保 BASE_URL 以 /v1 结尾
+        api_base = BASE_URL
+        if not api_base.endswith('/v1'):
+            api_base = api_base.rstrip('/') + '/v1'
+
+        # 创建OpenAI客户端
+        client = OpenAI(
+            base_url=api_base,
+            api_key=token,
+            default_headers={
+                'x-cursor-checksum': checksum
+            }
+        )
+
+        if is_stream:
+            def generate():
+                request_data = request_json.copy()
+                request_data.pop('stream', None)
+
+                stream = client.chat.completions.create(
+                    **request_data,
+                    stream=True
+                )
+                for chunk in stream:
+                    yield f"data: {chunk.model_dump_json()}\n\n"
+                yield "data: [DONE]\n\n"
+
+            return Response(
+                stream_with_context(generate()),
+                content_type='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'X-Accel-Buffering': 'no'
+                }
+            )
+        else:
+            response = client.chat.completions.create(**request_json)
+            return jsonify(response.model_dump()), 200
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
-    import logging
-
-    logging.basicConfig(level=logging.INFO)
-
-    # 移除 monkey.patch_all() 因为已经移到文件开头
-
-    http_server = WSGIServer(('0.0.0.0', 3200), app, log=app.logger)
-    print("Server starting on port 3200...")
-    http_server.serve_forever()
+    app.run(host='0.0.0.0', port=3200, threaded=True)
