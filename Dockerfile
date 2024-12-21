@@ -1,5 +1,4 @@
 FROM python:3.9-slim
-
 WORKDIR /app
 
 # 安装系统依赖
