@@ -17,4 +17,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 3200
 
-CMD ["gunicorn", "--workers=4", "--worker-class=gevent", "--bind=0.0.0.0:3200", "app:app"]
+# 使用 Flask 的内置服务器
+CMD ["python", "app.py"]
