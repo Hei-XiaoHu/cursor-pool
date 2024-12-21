@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  cursor-pool:
+    build: .
+    container_name: cursor-pool
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - base_url=${base_url}
+      - secret=${secret}
+    restart: unless-stopped

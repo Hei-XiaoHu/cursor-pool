@@ -1,0 +1,6 @@
+flask
+python-dotenv
+openai>=1.0.0
+gevent
+gunicorn
+httpx

@@ -1,0 +1,38 @@
+# 忽略 data 目录下的所有文件
+/data/*
+# 但不忽略 data 目录本身和 .gitkeep
+!/data/.gitkeep
+
+# 忽略 .env 文件
+.env
+
+# 不忽略 .env.example
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
