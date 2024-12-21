@@ -15,13 +15,6 @@ COPY data/ ./data/
 # 安装Python依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 创建非root用户
-RUN useradd -m appuser && \
-    chown -R appuser:appuser /app
-USER appuser
-
-# 暴露端口
 EXPOSE 3200
 
-# 修改启动命令
 CMD ["gunicorn", "--workers=4", "--worker-class=gevent", "--bind=0.0.0.0:3200", "app:app"]
