@@ -9,7 +9,7 @@ RUN apt-get update && \
 
 # 复制项目文件
 COPY requirements.txt .
-COPY app/ ./app/
+COPY app/ .
 COPY data/ ./data/
 
 # 安装Python依赖
@@ -23,5 +23,5 @@ USER appuser
 # 暴露端口
 EXPOSE 3200
 
-# 启动命令
-CMD ["gunicorn", "--workers=4", "--worker-class=gevent", "--bind=0.0.0.0:3200", "app.app:app"]
+# 修改启动命令
+CMD ["gunicorn", "--workers=4", "--worker-class=gevent", "--bind=0.0.0.0:3200", "app:app"]
